@@ -8,7 +8,7 @@ export function Nav({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   return (
     <div className="bg-slate-900 border-b border-slate-800 flex items-center justify-between py-4 px-8 box-border">
-      <Link to="/dashboard" className="block leading-3 w-1/3">
+      <Link to="/" className="block leading-3 w-1/3">
         <div className="font-black text-2xl text-white">{siteData.name}</div>
       </Link>
       <div className="w-1/3 flex justify-end">

@@ -13,7 +13,7 @@ export const auth = betterAuth({
       verification,
     },
   }),
-  trustedOrigins: ["https://strato.eugenescheepers.com"],
+  trustedOrigins: ["http://localhost:5173"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,

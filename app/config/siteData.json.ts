@@ -6,12 +6,12 @@ export interface SiteDataProps {
 }
 
 const siteData: SiteDataProps = {
-  name: "Strato Stack",
+  name: "Cattle Track",
   // Your website's title and description (meta fields)
-  title: "Strato Stack",
+  title: "Cattle Track",
   description:
-    "Strato Stack is a modern web development stack for building fast, scalable apps. It implements React Router, Shadcn UI, Tailwind CSS, Drizzle ORM, PostgreSQL, and Better Auth.",
-  url: "https://strato.eugenescheepers.com",
+    "Cattle Track is a modern platform designed to simplify farm management. Built for farmers, it streamlines tracking, organization, and daily operations using the latest web technologies. Manage your farm with ease, efficiency, and confidence.",
+  url: "https://cattle.eugenescheepers.com",
 };
 
 export default siteData;

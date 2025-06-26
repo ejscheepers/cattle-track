@@ -18,7 +18,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     headers: request.headers,
   });
   if (session && new URL(request.url).pathname === "/") {
-    throw redirect("/dashboard");
+    throw redirect("/track-cattle");
   }
 }
 
