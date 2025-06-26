@@ -24,6 +24,7 @@ import {
   useLoaderData,
   useNavigation,
   useActionData,
+  useFetcher,
 } from "react-router";
 import type { Route } from "./+types/track-cattle";
 import {
@@ -54,6 +55,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 const GENDER_OPTIONS = [
   { value: "bul", label: "Bul" },
@@ -100,6 +102,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (!treatmentsByCattle[t.cattleId]) treatmentsByCattle[t.cattleId] = [];
     treatmentsByCattle[t.cattleId].push(t);
   }
+  // Precompute ageMonths for each cattle
+  cattleData = cattleData.map((c) => ({
+    ...c,
+    ageMonths: getCattleAgeInMonths(c.receivedAt, c.receivedAge),
+  }));
+  const ages = cattleData.map((c) => c.ageMonths);
+  let minAgeMonths = ages.length > 0 ? Math.min(...ages) : 0;
+  let maxAgeMonths = ages.length > 0 ? Math.max(...ages) : 120;
+  // Ensure there is always a range for the slider
+  if (minAgeMonths === maxAgeMonths) {
+    maxAgeMonths = minAgeMonths + 1;
+  }
   return {
     cattleData,
     isLoggedIn: !!session,
@@ -107,6 +121,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     breedSuggestions,
     treatmentsByCattle,
     treatmentSuggestions,
+    minAgeMonths,
+    maxAgeMonths,
   };
 }
 
@@ -289,6 +305,16 @@ export async function action({ request }: Route.ActionArgs) {
       }))
     );
     return redirect(`/track-cattle`);
+  } else if (action === "complete_treatment") {
+    const id = String(formData.get("id") || "");
+    if (!id) {
+      return { error: "Missing treatment id." };
+    }
+    await db
+      .update(treatment)
+      .set({ completed: true })
+      .where(eq(treatment.id, id));
+    return null;
   }
   return redirect(`/track-cattle`);
 }
@@ -318,6 +344,19 @@ function getCattleAge(receivedAt: string | Date, receivedAge: number) {
   }
 }
 
+// Utility to calculate cattle age in months (number)
+function getCattleAgeInMonths(receivedAt: string | Date, receivedAge: number) {
+  const receivedDate = new Date(receivedAt);
+  const now = new Date();
+  let monthsSinceReceived =
+    (now.getFullYear() - receivedDate.getFullYear()) * 12 +
+    (now.getMonth() - receivedDate.getMonth());
+  if (now.getDate() < receivedDate.getDate()) {
+    monthsSinceReceived--;
+  }
+  return Math.max(0, (receivedAge || 0) + monthsSinceReceived);
+}
+
 export default function TrackCattle() {
   const {
     cattleData,
@@ -326,6 +365,8 @@ export default function TrackCattle() {
     breedSuggestions,
     treatmentsByCattle = {},
     treatmentSuggestions = [],
+    minAgeMonths,
+    maxAgeMonths,
   } = useLoaderData();
   const [searchValue, setSearchValue] = useState(search || "");
   const [addOpen, setAddOpen] = useState(false);
@@ -362,6 +403,22 @@ export default function TrackCattle() {
   >(null);
   // Pending treatments filter state
   const [showPendingOnly, setShowPendingOnly] = useState(false);
+  // Add state for pending treatment filter
+  const [pendingTreatmentFilter, setPendingTreatmentFilter] =
+    useState<string>("all");
+  // Collapsible state for pending filters
+  const [pendingFiltersOpen, setPendingFiltersOpen] = useState(false);
+  // Age range state (from loader)
+  const [ageRangeLimits] = useState<[number, number]>(
+    minAgeMonths === maxAgeMonths
+      ? [minAgeMonths, minAgeMonths + 1]
+      : [minAgeMonths, maxAgeMonths]
+  );
+  const [ageRange, setAgeRange] = useState<[number, number]>(
+    minAgeMonths === maxAgeMonths
+      ? [minAgeMonths, minAgeMonths + 1]
+      : [minAgeMonths, maxAgeMonths]
+  );
 
   // Add refs for breed and treatment inputs
   const addBreedInputRef = useRef<HTMLInputElement>(null);
@@ -418,10 +475,27 @@ export default function TrackCattle() {
         c.tag_number.toLowerCase().includes(searchValue.toLowerCase())
       )
     : cattleData;
+  // Age range filter
+  filteredCattle = filteredCattle.filter((c: any) => {
+    // If there was no range, allow both min and min+1
+    if (ageRange[0] === ageRange[1] - 1) {
+      return c.ageMonths === ageRange[0] || c.ageMonths === ageRange[1];
+    }
+    return c.ageMonths >= ageRange[0] && c.ageMonths <= ageRange[1];
+  });
   if (showPendingOnly) {
     filteredCattle = filteredCattle.filter((c: any) => {
       const treatments = treatmentsByCattle[c.id] || [];
-      return treatments.some((t: any) => t.completed === false);
+      // Only consider pending treatments
+      const pendingTreatments = treatments.filter(
+        (t: any) => t.completed === false
+      );
+      if (pendingTreatmentFilter && pendingTreatmentFilter !== "all") {
+        return pendingTreatments.some(
+          (t: any) => t.treatment === pendingTreatmentFilter
+        );
+      }
+      return pendingTreatments.length > 0;
     });
   }
 
@@ -465,6 +539,32 @@ export default function TrackCattle() {
     const isSelected = selectedIds.includes(cattle.id);
     const [showTreatments, setShowTreatments] = useState(false);
     const treatments = treatmentsByCattle[cattle.id] || [];
+    // Split treatments
+    const pendingTreatments = treatments.filter(
+      (t: any) => t.completed === false
+    );
+    const historicTreatments = treatments.filter(
+      (t: any) => t.completed === true
+    );
+    // Check if any pending treatment followUp is within 7 days
+    const now = new Date();
+    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const hasUrgentPending = pendingTreatments.some((t: any) => {
+      if (!t.followUp) return false;
+      const followUpDate = new Date(t.followUp);
+      return followUpDate >= now && followUpDate <= oneWeekFromNow;
+    });
+
+    const navigation = useNavigation();
+    // Helper to check if a treatment is being completed
+    const isCompleting = (id: string) => {
+      if (navigation.state !== "submitting") return false;
+      const formData = navigation.formData;
+      return (
+        formData?.get("_action") === "complete_treatment" &&
+        formData?.get("id") === id
+      );
+    };
     return (
       <Card
         className={`w-full max-w-sm mx-auto shadow-sm hover:shadow-md transition-shadow relative ${
@@ -472,7 +572,7 @@ export default function TrackCattle() {
             ? "pr-8 cursor-pointer ring-2 ring-offset-2 " +
               (isSelected ? "ring-blue-500" : "ring-transparent")
             : ""
-        }`}
+        } ${hasUrgentPending ? "border-2 border-red-500 bg-red-50" : ""}`}
         onClick={
           selectMode
             ? (e) => {
@@ -503,11 +603,11 @@ export default function TrackCattle() {
             </div>
             <div className="flex items-center gap-2">
               <Badge
-                variant={treatments.length > 0 ? "default" : "secondary"}
+                variant={pendingTreatments.length > 0 ? "default" : "secondary"}
                 className="flex items-center gap-1"
               >
                 <Stethoscope className="h-3 w-3 mr-1" />
-                {treatments.length}
+                {pendingTreatments.length}
               </Badge>
               <Badge
                 variant={cattle.gender === "bul" ? "default" : "secondary"}
@@ -562,30 +662,89 @@ export default function TrackCattle() {
               Treatments ({treatments.length})
             </button>
             {showTreatments && (
-              <div className="border rounded p-2 bg-muted text-sm space-y-2">
-                {treatments.length === 0 && <div>No treatments recorded.</div>}
-                {treatments.map((t: any, i: any) => (
-                  <div
-                    key={t.id || i}
-                    className="flex flex-col gap-1 border-b last:border-b-0 pb-2 last:pb-0"
-                  >
-                    <div className="font-semibold">{t.treatment}</div>
-                    <div>
-                      Date:{" "}
-                      {t.date ? new Date(t.date).toLocaleDateString() : "-"}
+              <div className="border rounded p-2 bg-muted text-sm space-y-4">
+                {/* Pending Treatments Section */}
+                <div>
+                  <div className="font-semibold mb-1">Pending Treatments</div>
+                  {pendingTreatments.length === 0 ? (
+                    <div className="text-muted-foreground">
+                      No pending treatments.
                     </div>
-                    {t.followUp && (
-                      <>
-                        <div>
-                          Follow-up: {new Date(t.followUp).toLocaleDateString()}
-                        </div>{" "}
-                        <div>
-                          Status: {t.completed ? "Completed" : "Pending"}
+                  ) : (
+                    pendingTreatments.map((t: any, i: number) => (
+                      <div
+                        key={t.id || i}
+                        className="flex justify-between items-center gap-4 border-b last:border-b-0 pb-2 last:pb-0"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold">{t.treatment}</div>
+                          <div>
+                            Date:{" "}
+                            {t.date
+                              ? new Date(t.date).toLocaleDateString()
+                              : "-"}
+                          </div>
+                          {t.followUp && (
+                            <div>
+                              Follow-up:{" "}
+                              {new Date(t.followUp).toLocaleDateString()}
+                            </div>
+                          )}
+                          <div>Status: Pending</div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ))}
+                        <div className="flex items-center justify-center h-full w-24">
+                          <Form method="post" className="mt-1" navigate={false}>
+                            <input
+                              type="hidden"
+                              name="_action"
+                              value="complete_treatment"
+                            />
+                            <input type="hidden" name="id" value={t.id} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="destructive"
+                              disabled={isCompleting(t.id)}
+                            >
+                              {isCompleting(t.id)
+                                ? "Completing..."
+                                : "Complete"}
+                            </Button>
+                          </Form>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Historic Treatments Section */}
+                <div className="mt-4">
+                  <div className="font-semibold mb-1">History</div>
+                  {historicTreatments.length === 0 ? (
+                    <div className="text-muted-foreground">
+                      No historic treatments.
+                    </div>
+                  ) : (
+                    historicTreatments.map((t: any, i: number) => (
+                      <div
+                        key={t.id || i}
+                        className="flex flex-col gap-1 border-b last:border-b-0 pb-2 last:pb-0"
+                      >
+                        <div className="font-semibold">{t.treatment}</div>
+                        <div>
+                          Date:{" "}
+                          {t.date ? new Date(t.date).toLocaleDateString() : "-"}
+                        </div>
+                        {t.followUp && (
+                          <div>
+                            Follow-up:{" "}
+                            {new Date(t.followUp).toLocaleDateString()}
+                          </div>
+                        )}
+                        <div>Status: Completed</div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -661,16 +820,7 @@ export default function TrackCattle() {
               />
             </div>
             {/* Pending treatments filter switch */}
-            <div className="flex items-center gap-2">
-              <Switch
-                id="pending-filter"
-                checked={showPendingOnly}
-                onCheckedChange={setShowPendingOnly}
-              />
-              <Label htmlFor="pending-filter" className="whitespace-nowrap">
-                Show only cattle with pending treatments
-              </Label>
-            </div>
+            {/* (Removed from here) */}
             <div className="flex gap-2 mb-2">
               <Button
                 variant={selectMode ? "secondary" : "outline"}
@@ -886,6 +1036,98 @@ export default function TrackCattle() {
               </Dialog>
             )}
           </div>
+        </div>
+
+        {/* Pending Treatments Collapsible Filter */}
+        <div className="max-w-sm sm:max-w-full w-full mx-auto sm:mx-0 my-4 border rounded-md bg-white transition-colors">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-4 py-2  w-full justify-start"
+            onClick={() => setPendingFiltersOpen((v) => !v)}
+            aria-expanded={pendingFiltersOpen}
+            aria-controls="pending-filters-panel"
+          >
+            <span className="font-medium">
+              {pendingFiltersOpen ? "Hide Filters" : "Show Filters"}
+            </span>
+            <ChevronDown
+              className={`h-5 w-5 transition-transform ${
+                pendingFiltersOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+          {pendingFiltersOpen && (
+            <div
+              id="pending-filters-panel"
+              className="mt-2 p-4 flex flex-col gap-4"
+            >
+              {/* Age Range Filter */}
+              <div className="flex flex-col gap-2">
+                <Label>Age Range</Label>
+                <div className="flex items-center gap-4 max-w-md py-3">
+                  <Slider
+                    min={ageRangeLimits[0]}
+                    max={ageRangeLimits[1]}
+                    step={1}
+                    value={ageRange}
+                    onValueChange={(v: number[]) => {
+                      // Prevent thumbs from overlapping
+                      if (v.length !== 2 || v[0] === v[1]) return;
+                      setAgeRange([v[0], v[1]]);
+                    }}
+                    className="flex-1"
+                    minStepsBetweenThumbs={1}
+                    formatLabel={(value: number) => {
+                      const years = Math.floor(value / 12);
+                      const months = value % 12;
+                      return years > 0 ? `${years}y ${months}m` : `${months}m`;
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="pending-filter"
+                  checked={showPendingOnly}
+                  onCheckedChange={setShowPendingOnly}
+                />
+                <Label htmlFor="pending-filter" className="whitespace-nowrap">
+                  Pending Treatments
+                </Label>
+              </div>
+              {/* Pending treatments dropdown, visible only if switch is on */}
+              {showPendingOnly && (
+                <div className="min-w-[200px]">
+                  <Select
+                    value={pendingTreatmentFilter}
+                    onValueChange={setPendingTreatmentFilter}
+                  >
+                    <SelectTrigger className="w-full border rounded-md px-3 py-2">
+                      <SelectValue placeholder="All pending treatments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        All pending treatments
+                      </SelectItem>
+                      {/* Unique pending treatment names */}
+                      {Array.from(
+                        new Set(
+                          Object.values(treatmentsByCattle)
+                            .flat()
+                            .filter((t: any) => t.completed === false)
+                            .map((t: any) => t.treatment)
+                        )
+                      ).map((treatment: string) => (
+                        <SelectItem key={treatment} value={treatment}>
+                          {treatment}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="mt-6 sm:mx-auto sm:w-full">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
