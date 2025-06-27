@@ -393,44 +393,44 @@ export default function TrackCattle() {
                 {getCattleAge(cattle.receivedAt, cattle.receivedAge)}
               </p>
             </div>
-            {/* View Treatments Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-              onClick={() => {
-                navigate(`/track-cattle/treatment-view/${cattle.tag_number}`, {
-                  preventScrollReset: true,
-                });
-              }}
-              aria-label="View Treatments"
-            >
-              <Stethoscope className="h-4 w-4 mr-1" />
-              View Treatments
-            </Button>
-            {/* Add Treatment Button */}
+            {/* Action Buttons 2x2 Grid */}
             {!selectMode && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                onClick={() => {
-                  navigate(`/track-cattle/treatment/${cattle.tag_number}`, {
-                    preventScrollReset: true,
-                  });
-                }}
-                aria-label="Add Treatment"
-              >
-                <PlusCircle className="h-4 w-4 mr-1" />
-                Add Treatment
-              </Button>
-            )}
-            {!selectMode && (
-              <div className="flex gap-2 pt-2">
+              <div className="grid grid-cols-2 gap-4 pt-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                  className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                  onClick={() => {
+                    navigate(
+                      `/track-cattle/treatment-view/${cattle.tag_number}`,
+                      {
+                        preventScrollReset: true,
+                      }
+                    );
+                  }}
+                  aria-label="View Treatments"
+                >
+                  <Stethoscope className="h-4 w-4 mr-1" />
+                  View Treatments
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                  onClick={() => {
+                    navigate(`/track-cattle/treatment/${cattle.tag_number}`, {
+                      preventScrollReset: true,
+                    });
+                  }}
+                  aria-label="Add Treatment"
+                >
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  Add Treatment
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
                   onClick={() =>
                     navigate(`/track-cattle/edit/${cattle.tag_number}`, {
                       preventScrollReset: true,
@@ -444,7 +444,7 @@ export default function TrackCattle() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 w-full bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                  className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                   aria-label="Delete"
                   onClick={() => {
                     navigate(`/track-cattle/delete/${cattle.tag_number}`, {
