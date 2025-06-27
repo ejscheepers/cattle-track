@@ -30,11 +30,11 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/drizzle ./drizzle
 
 ENV HOST=0.0.0.0
-ENV PORT=8000
+ENV PORT=7000
 ENV NODE_ENV=production
 
 
-EXPOSE 8000
+EXPOSE 7000
 CMD ["npm", "run", "start"]
 
 

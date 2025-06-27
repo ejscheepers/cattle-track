@@ -13,7 +13,7 @@ export const auth = betterAuth({
       verification,
     },
   }),
-  trustedOrigins: ["http://localhost:5173"],
+  trustedOrigins: ["https://cattle-track.com"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
