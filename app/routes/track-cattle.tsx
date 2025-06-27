@@ -17,7 +17,7 @@ import { auth } from "@/lib/auth";
 import { parseTag } from "@/lib/cattle-tag-utils";
 import { cattle, treatment } from "@/models/schema.server";
 import { db } from "@/utils/db.server";
-import { count, ilike } from "drizzle-orm";
+import { ilike } from "drizzle-orm";
 import {
   Calendar,
   ChevronDown,
@@ -60,29 +60,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 30));
   const pageSize = 30;
 
-  // Get total count for pagination
-  const countRows = await db
-    .select({ count: count() })
-    .from(cattle)
-    .where(search ? ilike(cattle.tag_number, `%${search}%`) : undefined);
-  const totalCount = Number(countRows[0]?.count) || 0;
+  // Read age range from URL parameters
+  const minAgeParam = url.searchParams.get("minAge");
+  const maxAgeParam = url.searchParams.get("maxAge");
 
-  // Clamp page to valid range
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const clampedPage = Math.min(page, totalPages);
-  const offset = (clampedPage - 1) * pageSize;
-
-  // Get paginated data
-  let paginatedQuery = db
+  // Get all cattle data first to calculate ages
+  let allCattleQuery = db
     .select()
     .from(cattle)
-    .where(search ? ilike(cattle.tag_number, `%${search}%`) : undefined)
-    .limit(pageSize)
-    .offset(offset);
-  let cattleData = (await paginatedQuery) as any[];
+    .where(search ? ilike(cattle.tag_number, `%${search}%`) : undefined);
+  let allCattleData = (await allCattleQuery) as any[];
 
   // Sort by prefix, then by number (ascending)
-  cattleData.sort((a, b) => {
+  allCattleData.sort((a, b) => {
     const pa = parseTag(a.tag_number);
     const pb = parseTag(b.tag_number);
     if (!pa || !pb) return 0;
@@ -91,6 +81,40 @@ export async function loader({ request }: Route.LoaderArgs) {
     return pa.number - pb.number;
   });
 
+  // Precompute ageMonths for each cattle
+  allCattleData = allCattleData.map((c) => ({
+    ...c,
+    ageMonths: getCattleAgeInMonths(c.receivedAt, c.receivedAge),
+  }));
+
+  // Calculate age range limits from all data
+  const ages = allCattleData.map((c) => c.ageMonths);
+  let minAgeMonths = ages.length > 0 ? Math.min(...ages) : 0;
+  let maxAgeMonths = ages.length > 0 ? Math.max(...ages) : 120;
+  if (minAgeMonths === maxAgeMonths) {
+    maxAgeMonths = minAgeMonths + 1;
+  }
+
+  // Parse age filter parameters
+  const minAgeFilter = minAgeParam ? parseInt(minAgeParam, 10) : minAgeMonths;
+  const maxAgeFilter = maxAgeParam ? parseInt(maxAgeParam, 10) : maxAgeMonths;
+
+  // Filter by age range
+  let filteredCattle = allCattleData.filter((c) => {
+    return c.ageMonths >= minAgeFilter && c.ageMonths <= maxAgeFilter;
+  });
+
+  // Get total count for pagination (after filtering)
+  const totalCount = filteredCattle.length;
+
+  // Clamp page to valid range
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const clampedPage = Math.min(page, totalPages);
+  const offset = (clampedPage - 1) * pageSize;
+
+  // Paginate the filtered results
+  const cattleData = filteredCattle.slice(offset, offset + pageSize);
+
   // Fetch all treatments and group by cattleId
   const treatments = await db.select().from(treatment);
   const treatmentsByCattle: Record<string, any[]> = {};
@@ -98,17 +122,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (!treatmentsByCattle[t.cattleId]) treatmentsByCattle[t.cattleId] = [];
     treatmentsByCattle[t.cattleId].push(t);
   }
-  // Precompute ageMonths for each cattle
-  cattleData = cattleData.map((c) => ({
-    ...c,
-    ageMonths: getCattleAgeInMonths(c.receivedAt, c.receivedAge),
-  }));
-  const ages = cattleData.map((c) => c.ageMonths);
-  let minAgeMonths = ages.length > 0 ? Math.min(...ages) : 0;
-  let maxAgeMonths = ages.length > 0 ? Math.max(...ages) : 120;
-  if (minAgeMonths === maxAgeMonths) {
-    maxAgeMonths = minAgeMonths + 1;
-  }
+
   return {
     cattleData,
     isLoggedIn: !!session,
@@ -184,13 +198,8 @@ export default function TrackCattle() {
     useState<string>("all");
   // Collapsible state for pending filters
   const [pendingFiltersOpen, setPendingFiltersOpen] = useState(false);
-  // Age range state (from loader)
+  // Age range limits (from loader)
   const [ageRangeLimits] = useState<[number, number]>(
-    minAgeMonths === maxAgeMonths
-      ? [minAgeMonths, minAgeMonths + 1]
-      : [minAgeMonths, maxAgeMonths]
-  );
-  const [ageRange, setAgeRange] = useState<[number, number]>(
     minAgeMonths === maxAgeMonths
       ? [minAgeMonths, minAgeMonths + 1]
       : [minAgeMonths, maxAgeMonths]
@@ -198,6 +207,15 @@ export default function TrackCattle() {
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Get current age filter values from URL
+  const params = new URLSearchParams(location.search);
+  const currentMinAge = params.get("minAge")
+    ? parseInt(params.get("minAge")!, 10)
+    : minAgeMonths;
+  const currentMaxAge = params.get("maxAge")
+    ? parseInt(params.get("maxAge")!, 10)
+    : maxAgeMonths;
 
   useEffect(() => {
     if (location.pathname === "/track-cattle") {
@@ -226,14 +244,8 @@ export default function TrackCattle() {
         c.tag_number.toLowerCase().includes(searchValue.toLowerCase())
       )
     : cattleData;
-  // Age range filter
-  filteredCattle = filteredCattle.filter((c: any) => {
-    // If there was no range, allow both min and min+1
-    if (ageRange[0] === ageRange[1] - 1) {
-      return c.ageMonths === ageRange[0] || c.ageMonths === ageRange[1];
-    }
-    return c.ageMonths >= ageRange[0] && c.ageMonths <= ageRange[1];
-  });
+
+  // Apply pending treatments filter
   if (showPendingOnly) {
     filteredCattle = filteredCattle.filter((c: any) => {
       const treatments = treatmentsByCattle[c.id] || [];
@@ -590,19 +602,53 @@ export default function TrackCattle() {
             >
               {/* Age Range Filter */}
               <div className="flex flex-col gap-2">
-                <Label>Age Range</Label>
-                <div className="flex items-center gap-4 max-w-md py-3">
+                <div className="flex items-center justify-between">
+                  <Label>Age Range</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const params = new URLSearchParams(location.search);
+                      params.set("minAge", minAgeMonths.toString());
+                      params.set("maxAge", maxAgeMonths.toString());
+                      params.set("page", "1");
+                      navigate(
+                        {
+                          pathname: location.pathname,
+                          search: params.toString(),
+                        },
+                        { replace: true }
+                      );
+                    }}
+                    className="text-xs"
+                  >
+                    Reset
+                  </Button>
+                </div>
+                <div className="w-full py-3 px-2">
                   <Slider
                     min={ageRangeLimits[0]}
                     max={ageRangeLimits[1]}
                     step={1}
-                    value={ageRange}
+                    value={[currentMinAge, currentMaxAge]}
                     onValueChange={(v: number[]) => {
                       // Prevent thumbs from overlapping
                       if (v.length !== 2 || v[0] === v[1]) return;
-                      setAgeRange([v[0], v[1]]);
+
+                      // Update URL directly to trigger reload
+                      const params = new URLSearchParams(location.search);
+                      params.set("minAge", v[0].toString());
+                      params.set("maxAge", v[1].toString());
+                      params.set("page", "1");
+                      navigate(
+                        {
+                          pathname: location.pathname,
+                          search: params.toString(),
+                        },
+                        { replace: true }
+                      );
                     }}
-                    className="flex-1"
+                    className="w-full"
                     minStepsBetweenThumbs={1}
                     formatLabel={(value: number) => {
                       const years = Math.floor(value / 12);
@@ -624,7 +670,7 @@ export default function TrackCattle() {
               </div>
               {/* Pending treatments dropdown, visible only if switch is on */}
               {showPendingOnly && (
-                <div className="min-w-[200px]">
+                <div className="w-full">
                   <Select
                     value={pendingTreatmentFilter}
                     onValueChange={setPendingTreatmentFilter}
@@ -658,12 +704,12 @@ export default function TrackCattle() {
         </div>
         <div className="mt-6 sm:mx-auto sm:w-full">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cattleData.length === 0 && (
+            {filteredCattle.length === 0 && (
               <div className="col-span-full text-center py-4">
                 No cattle found.
               </div>
             )}
-            {cattleData.map((c: any) => (
+            {filteredCattle.map((c: any) => (
               <div key={c.id}>
                 <CattleCard cattle={c} />
               </div>
