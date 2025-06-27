@@ -169,7 +169,7 @@ export default function AddCattleModal() {
 
   return (
     <Dialog open={addOpen} onOpenChange={setAddOpen}>
-      <DialogContent className="w-full max-w-md mx-auto">
+      <DialogContent className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Cattle</DialogTitle>
           <DialogDescription>Enter new cattle details.</DialogDescription>
