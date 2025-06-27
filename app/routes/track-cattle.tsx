@@ -37,7 +37,6 @@ import {
   useLoaderData,
   useLocation,
   useNavigate,
-  useNavigation,
 } from "react-router";
 import type { Route } from "./+types/track-cattle";
 
@@ -303,8 +302,6 @@ export default function TrackCattle() {
       return followUpDate >= now && followUpDate <= oneWeekFromNow;
     });
 
-    const navigation = useNavigation();
-
     return (
       <>
         <Card
@@ -489,11 +486,11 @@ export default function TrackCattle() {
             </div>
             {/* Pending treatments filter switch */}
             {/* (Removed from here) */}
-            <div className="flex gap-2 mb-2">
+            <div className="flex flex-wrap gap-2 mb-2">
               <Button
                 variant={selectMode ? "secondary" : "outline"}
                 onClick={handleSelectToggle}
-                className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+                className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0 text-sm"
               >
                 {selectMode ? "Cancel Select" : "Bulk Select"}
               </Button>
@@ -511,7 +508,7 @@ export default function TrackCattle() {
                       );
                     }
                   }}
-                  className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+                  className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0 text-sm"
                 >
                   Delete Selected
                 </Button>
@@ -521,7 +518,7 @@ export default function TrackCattle() {
                   <Button
                     variant="outline"
                     onClick={handleSelectAll}
-                    className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+                    className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0 text-sm"
                   >
                     Select All
                   </Button>
@@ -529,7 +526,7 @@ export default function TrackCattle() {
                   <Button
                     variant="outline"
                     onClick={handleDeselectAll}
-                    className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+                    className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0 text-sm"
                   >
                     Deselect All
                   </Button>
@@ -548,7 +545,7 @@ export default function TrackCattle() {
                       );
                     }
                   }}
-                  className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+                  className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0 text-sm"
                 >
                   <PlusCircle className="h-4 w-4 mr-1" />
                   Add Treatment to Selected
