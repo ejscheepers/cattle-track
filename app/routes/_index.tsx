@@ -1,11 +1,11 @@
-import { Nav } from "@/components/nav";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import siteData from "@/config/siteData.json";
 import { auth } from "@/lib/auth";
 import { generateMeta } from "@forge42/seo-tools/remix/metadata";
 import { organization } from "@forge42/seo-tools/structured-data/organization";
 import type { MetaFunction } from "react-router";
 import type { Route } from "./+types/_index";
-import { Button } from "@/components/ui/button";
 
 export const meta: MetaFunction = () => {
   // This utility will under the hood generate the twitter & og title and description tags for you.
@@ -41,25 +41,47 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function Index({ loaderData }: Route.ComponentProps) {
   const { isLoggedIn } = loaderData;
   return (
-    <>
-      <Nav isLoggedIn={isLoggedIn} />
-      <div className="flex min-h-full flex-1 flex-col sm:px-6 lg:px-8 pt-6 space-y-6 px-3">
-        <h1 className="text-4xl font-bold mb-8">What to do</h1>
-        <div className="grid grid-cols-1 justify-center">
-          <div className="bg-white shadow-lg rounded-lg p-6 flex flex-col items-center mx-auto">
-            <h2 className="text-2xl font-semibold mb-4">Track Cattle</h2>
-            <p className="mb-6 text-center">
-              Monitor and manage your existing cattle with detailed tracking
-              tools.
-            </p>
-            <a href="/track-cattle" className="inline-block">
-              <Button className="bg-green-600 hover:bg-green-700 text-white">
-                Track Cattle
-              </Button>
-            </a>
+    <main className="flex-1">
+      <section className="w-full min-h-screen flex flex-col justify-center py-6 md:py-12 lg:py-24 xl:py-24 bg-gradient-to-b from-green-50 to-white">
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="grid gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
+            <div className="flex flex-col justify-center space-y-4">
+              <div className="space-y-2">
+                <Badge variant="secondary" className="w-fit">
+                  Simple Cattle Management
+                </Badge>
+                <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none">
+                  Track Your Cattle Information
+                </h1>
+                <p className="max-w-[600px] text-gray-500 md:text-xl">
+                  Keep detailed records of your cattle herd. Track health,
+                  breeding, weights, and important notes for each animal in one
+                  simple system.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 min-[400px]:flex-row">
+                <a href="/track-cattle">
+                  <Button
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Get Started
+                  </Button>
+                </a>
+              </div>
+            </div>
+            <div className="flex items-center justify-center">
+              <img
+                src="/cattle-track-logo.png"
+                width="600"
+                height="auto"
+                alt="Cattle records and information tracking interface"
+                className="mx-auto  overflow-hidden rounded-xl object-contain"
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </>
+      </section>
+    </main>
   );
 }

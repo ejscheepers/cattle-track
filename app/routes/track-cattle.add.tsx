@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { auth } from "@/lib/auth";
-import { getRandomPrefix, parseTag } from "@/lib/cattle-tag-utils";
+import { getNextAvailablePrefix, parseTag } from "@/lib/cattle-tag-utils";
 import { cattle } from "@/models/schema.server";
 import { db } from "@/utils/db.server";
 import { inArray } from "drizzle-orm";
@@ -77,53 +77,49 @@ export async function action({ request }: { request: Request }) {
   const allTags = await db
     .select({ tag_number: cattle.tag_number })
     .from(cattle);
+  // Build prefix usage map and number sets
+  let prefixUsage: Record<string, number> = {};
   let tagMap: Record<string, Set<number>> = {};
-  let usedPrefixes = new Set<string>();
   for (const row of allTags) {
     const parsed = parseTag(row.tag_number);
     if (parsed) {
       if (!tagMap[parsed.prefix]) tagMap[parsed.prefix] = new Set();
       tagMap[parsed.prefix].add(parsed.number);
-      usedPrefixes.add(parsed.prefix);
+      prefixUsage[parsed.prefix] = (prefixUsage[parsed.prefix] || 0) + 1;
     }
   }
-  // Find the current prefix (last used with available slots), or pick a new one
-  let prefix = null;
+  let prefix = getNextAvailablePrefix(prefixUsage);
   let number = 0;
-  // Try to find a prefix with available slots (max 99)
-  for (const p of usedPrefixes) {
-    if (tagMap[p] && tagMap[p].size < 99) {
-      prefix = p;
-      number = Math.max(...Array.from(tagMap[p]));
+  if (!tagMap[prefix]) tagMap[prefix] = new Set();
+  // Find the next available number for this prefix (1-50)
+  for (let i = 1; i <= 50; i++) {
+    if (!tagMap[prefix].has(i)) {
+      number = i - 1;
       break;
     }
-  }
-  // If none, pick a new random prefix
-  if (!prefix) {
-    prefix = getRandomPrefix(usedPrefixes);
-    number = 0;
-    tagMap[prefix] = new Set();
   }
   const tagNumbers: string[] = [];
   for (let i = 0; i < groupCount; i++) {
     number++;
-    if (number > 99) {
-      usedPrefixes.add(prefix);
-      prefix = getRandomPrefix(usedPrefixes);
+    // If this prefix is full, move to next available prefix
+    if (number > 50) {
+      prefixUsage[prefix] = 50;
+      prefix = getNextAvailablePrefix(prefixUsage);
       number = 1;
       if (!tagMap[prefix]) tagMap[prefix] = new Set();
     }
     // Ensure uniqueness
     while (tagMap[prefix] && tagMap[prefix].has(number)) {
       number++;
-      if (number > 99) {
-        usedPrefixes.add(prefix);
-        prefix = getRandomPrefix(usedPrefixes);
+      if (number > 50) {
+        prefixUsage[prefix] = 50;
+        prefix = getNextAvailablePrefix(prefixUsage);
         number = 1;
         if (!tagMap[prefix]) tagMap[prefix] = new Set();
       }
     }
     tagMap[prefix].add(number);
+    prefixUsage[prefix] = (prefixUsage[prefix] || 0) + 1;
     tagNumbers.push(`${prefix}${number}`);
   }
   // Check for existing tag numbers (shouldn't happen, but for safety)

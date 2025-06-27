@@ -6,7 +6,7 @@ export function getAllPrefixes(): string[] {
   for (let i = 65; i <= 90; i++) {
     prefixes.push(String.fromCharCode(i));
   }
-  // 2-letter prefixes
+  // 2-letter prefixes (AA, AB, ..., AZ, BA, ..., ZZ)
   for (let i = 65; i <= 90; i++) {
     for (let j = 65; j <= 90; j++) {
       prefixes.push(String.fromCharCode(i) + String.fromCharCode(j));
@@ -15,19 +15,25 @@ export function getAllPrefixes(): string[] {
   return prefixes;
 }
 
+/**
+ * Returns the first prefix with less than 50 usages, in A-Z, AA-AZ, BA-BZ, ..., ZA-ZZ order.
+ * Throws if all prefixes are exhausted.
+ */
+export function getNextAvailablePrefix(prefixUsage: Record<string, number>): string {
+  const prefixes = getAllPrefixes();
+  for (const prefix of prefixes) {
+    if ((prefixUsage[prefix] ?? 0) < 50) {
+      return prefix;
+    }
+  }
+  throw new Error("No available prefixes");
+}
+
+/**
+ * @deprecated Use getNextAvailablePrefix instead.
+ */
 export function getRandomPrefix(usedPrefixes: Set<string>): string {
-  const PREFIX_POOL = getAllPrefixes();
-  const available = PREFIX_POOL.filter(p => !usedPrefixes.has(p));
-  if (available.length > 0) {
-    return available[Math.floor(Math.random() * available.length)];
-  }
-  // If all are used, generate a new random 2-letter prefix
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  let str = chars.charAt(Math.floor(Math.random() * 26)) + chars.charAt(Math.floor(Math.random() * 26));
-  while (usedPrefixes.has(str)) {
-    str = chars.charAt(Math.floor(Math.random() * 26)) + chars.charAt(Math.floor(Math.random() * 26));
-  }
-  return str;
+  return getNextAvailablePrefix(Object.fromEntries(Array.from(usedPrefixes).map(p => [p, 1])));
 }
 
 export function parseTag(tag: string): { prefix: string, number: number } | null {

@@ -17,7 +17,7 @@ import { auth } from "@/lib/auth";
 import { parseTag } from "@/lib/cattle-tag-utils";
 import { cattle, treatment } from "@/models/schema.server";
 import { db } from "@/utils/db.server";
-import { ilike } from "drizzle-orm";
+import { count, ilike } from "drizzle-orm";
 import {
   Calendar,
   ChevronDown,
@@ -58,11 +58,30 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
-  let query = db.select().from(cattle);
-  const filteredQuery = search
-    ? query.where(ilike(cattle.tag_number, `%${search}%`))
-    : query;
-  let cattleData = (await filteredQuery) as any[];
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 30));
+  const pageSize = 30;
+
+  // Get total count for pagination
+  const countRows = await db
+    .select({ count: count() })
+    .from(cattle)
+    .where(search ? ilike(cattle.tag_number, `%${search}%`) : undefined);
+  const totalCount = Number(countRows[0]?.count) || 0;
+
+  // Clamp page to valid range
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const clampedPage = Math.min(page, totalPages);
+  const offset = (clampedPage - 1) * pageSize;
+
+  // Get paginated data
+  let paginatedQuery = db
+    .select()
+    .from(cattle)
+    .where(search ? ilike(cattle.tag_number, `%${search}%`) : undefined)
+    .limit(pageSize)
+    .offset(offset);
+  let cattleData = (await paginatedQuery) as any[];
+
   // Sort by prefix, then by number (ascending)
   cattleData.sort((a, b) => {
     const pa = parseTag(a.tag_number);
@@ -75,7 +94,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Fetch all treatments and group by cattleId
   const treatments = await db.select().from(treatment);
-
   const treatmentsByCattle: Record<string, any[]> = {};
   for (const t of treatments) {
     if (!treatmentsByCattle[t.cattleId]) treatmentsByCattle[t.cattleId] = [];
@@ -89,7 +107,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const ages = cattleData.map((c) => c.ageMonths);
   let minAgeMonths = ages.length > 0 ? Math.min(...ages) : 0;
   let maxAgeMonths = ages.length > 0 ? Math.max(...ages) : 120;
-  // Ensure there is always a range for the slider
   if (minAgeMonths === maxAgeMonths) {
     maxAgeMonths = minAgeMonths + 1;
   }
@@ -100,6 +117,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     treatmentsByCattle,
     minAgeMonths,
     maxAgeMonths,
+    page: clampedPage,
+    totalPages,
   };
 }
 
@@ -149,6 +168,8 @@ export default function TrackCattle() {
     treatmentsByCattle = {},
     minAgeMonths,
     maxAgeMonths,
+    page,
+    totalPages,
   } = useLoaderData();
 
   const [searchValue, setSearchValue] = useState(search || "");
@@ -185,6 +206,20 @@ export default function TrackCattle() {
       setSelectMode(false);
     }
   }, [location.pathname]);
+
+  // When search changes, update URL and reset page
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (searchValue !== params.get("search")) {
+      params.set("search", searchValue);
+      params.set("page", "1");
+      navigate(
+        { pathname: location.pathname, search: params.toString() },
+        { replace: true }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchValue]);
 
   // Filter client-side for instant search UX
   let filteredCattle = searchValue
@@ -239,6 +274,13 @@ export default function TrackCattle() {
     setSelectedIds((prev) =>
       prev.filter((id) => !filteredCattle.some((c: any) => c.id === id))
     );
+  }
+
+  // Pagination controls
+  function handlePageChange(newPage: number) {
+    const params = new URLSearchParams(location.search);
+    params.set("page", String(newPage));
+    navigate({ pathname: location.pathname, search: params.toString() });
   }
 
   // CattleCard component for card UI
@@ -434,7 +476,7 @@ export default function TrackCattle() {
           </h2>
           <div className="flex flex-col md:flex-row gap-2 w-full sm:w-auto justify-end">
             <div className="relative w-full max-w-sm mx-auto sm:w-auto sm:max-w-none sm:mx-0">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+              <span className="absolute left-3 inset-y-0 flex items-center text-muted-foreground pointer-events-none">
                 <Search className="h-4 w-4" />
               </span>
               <Input
@@ -619,17 +661,39 @@ export default function TrackCattle() {
         </div>
         <div className="mt-6 sm:mx-auto sm:w-full">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCattle.length === 0 && (
+            {cattleData.length === 0 && (
               <div className="col-span-full text-center py-4">
                 No cattle found.
               </div>
             )}
-            {filteredCattle.map((c: any) => (
+            {cattleData.map((c: any) => (
               <div key={c.id}>
                 <CattleCard cattle={c} />
               </div>
             ))}
           </div>
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-4 my-6">
+              <Button
+                variant="outline"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
