@@ -45,19 +45,13 @@ export default function Index({ loaderData }: Route.ComponentProps) {
       <Nav isLoggedIn={isLoggedIn} />
       <div className="flex min-h-full flex-1 flex-col sm:px-6 lg:px-8 pt-6 space-y-6 px-3">
         <h1 className="text-4xl font-bold mb-8">What to do</h1>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div className="bg-white shadow-lg rounded-lg p-6 flex flex-col items-center">
-            <h2 className="text-2xl font-semibold mb-4">Add Cattle</h2>
-            <p className="mb-6 text-center">Easily add new cattle to your herd and keep your records up to date.</p>
-            <a href="#" className="inline-block">
-              <Button>
-                Add Cattle
-              </Button>
-            </a>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6 flex flex-col items-center">
-            <h2 className="text-2xl font-semibold mb-4">Track Existing Cattle</h2>
-            <p className="mb-6 text-center">Monitor and manage your existing cattle with detailed tracking tools.</p>
+        <div className="grid grid-cols-1 justify-center">
+          <div className="bg-white shadow-lg rounded-lg p-6 flex flex-col items-center mx-auto">
+            <h2 className="text-2xl font-semibold mb-4">Track Cattle</h2>
+            <p className="mb-6 text-center">
+              Monitor and manage your existing cattle with detailed tracking
+              tools.
+            </p>
             <a href="/track-cattle" className="inline-block">
               <Button className="bg-green-600 hover:bg-green-700 text-white">
                 Track Cattle

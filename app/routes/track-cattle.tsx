@@ -1,63 +1,56 @@
 import { Nav } from "@/components/nav";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-  DialogTrigger,
-  DialogClose,
-} from "@/components/ui/dialog";
-import { auth } from "@/lib/auth";
-import { cattle, treatment } from "@/models/schema.server";
-import { db } from "@/utils/db.server";
-import { desc, eq, ilike, inArray } from "drizzle-orm";
-import { useRef, useState, useEffect } from "react";
-import {
-  Form,
-  redirect,
-  useSubmit,
-  useLoaderData,
-  useNavigation,
-  useActionData,
-  useFetcher,
-} from "react-router";
-import type { Route } from "./+types/track-cattle";
-import {
-  getAllPrefixes,
-  getRandomPrefix,
-  parseTag,
-} from "@/lib/cattle-tag-utils";
-import {
   Select,
-  SelectTrigger,
   SelectContent,
   SelectItem,
+  SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { auth } from "@/lib/auth";
+import { getRandomPrefix, parseTag } from "@/lib/cattle-tag-utils";
+import { cattle, treatment } from "@/models/schema.server";
+import { db } from "@/utils/db.server";
+import { ilike, inArray } from "drizzle-orm";
 import {
-  Eye,
-  Edit,
-  Trash2,
-  Tag,
-  Scale,
-  Heart,
-  Search,
   Calendar,
   ChevronDown,
+  Eye,
+  Heart,
   PlusCircle,
+  Scale,
+  Search,
   Stethoscope,
+  Tag,
+  Trash2,
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
+import { useRef, useState } from "react";
+import {
+  Form,
+  Outlet,
+  redirect,
+  useLoaderData,
+  useNavigate,
+  useNavigation,
+} from "react-router";
+import type { Route } from "./+types/track-cattle";
 
-const GENDER_OPTIONS = [
+export const GENDER_OPTIONS = [
   { value: "bul", label: "Bul" },
   { value: "vers", label: "Vers" },
   { value: "os", label: "Os" },
@@ -71,6 +64,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!session) {
     throw redirect("/login");
   }
+
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
   let query = db.select().from(cattle);
@@ -87,11 +81,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (pa.prefix > pb.prefix) return 1;
     return pa.number - pb.number;
   });
-  // Fetch unique breeds for suggestions
-  const breedRows = await db.select({ breed: cattle.breed }).from(cattle);
-  const breedSuggestions = Array.from(
-    new Set(breedRows.map((b) => b.breed).filter(Boolean))
-  );
+
   // Fetch all treatments and group by cattleId
   const treatments = await db.select().from(treatment);
   const treatmentSuggestions = Array.from(
@@ -118,7 +108,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     cattleData,
     isLoggedIn: !!session,
     search,
-    breedSuggestions,
     treatmentsByCattle,
     treatmentSuggestions,
     minAgeMonths,
@@ -128,6 +117,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+
   const action = String(formData.get("_action") || "");
   const addGroup = formData.get("add_group") === "1";
   if (action === "add" && (addGroup || !addGroup)) {
@@ -222,67 +212,14 @@ export async function action({ request }: Route.ActionArgs) {
         receivedAge,
       }))
     );
-    return redirect(`/track-cattle`);
-  } else if (action === "edit") {
-    const id = String(formData.get("id") || "");
-    const tag_number = String(formData.get("tag_number") || "");
-    const gender = String(formData.get("gender") || "") as
-      | "bul"
-      | "vers"
-      | "os"
-      | "koei";
-    const breed = String(formData.get("breed") || "");
-    const mass = Number(formData.get("mass") || 0);
-    const receivedAt = formData.get("receivedAt")
-      ? new Date(String(formData.get("receivedAt")))
-      : undefined;
-    const receivedAge = formData.get("receivedAge")
-      ? Number(formData.get("receivedAge"))
-      : undefined;
-    await db
-      .update(cattle)
-      .set({
-        tag_number,
-        gender,
-        breed,
-        mass,
-        ...(receivedAt ? { receivedAt } : {}),
-        ...(receivedAge !== undefined ? { receivedAge } : {}),
-      })
-      .where(eq(cattle.id, id));
-  } else if (action === "delete") {
-    const id = String(formData.get("id") || "");
-    if (id) {
-      await db.delete(cattle).where(eq(cattle.id, id));
-    }
-    return redirect(`/track-cattle`);
+    return { success: "Cattle added successfully" };
   } else if (action === "bulk_delete") {
     // Bulk delete logic
     const ids = formData.getAll("ids").map(String).filter(Boolean);
     if (ids.length > 0) {
       await db.delete(cattle).where(inArray(cattle.id, ids));
     }
-    return redirect(`/track-cattle`);
-  } else if (action === "add_treatment") {
-    const cattleId = String(formData.get("cattleId") || "");
-    const treatmentName = String(formData.get("treatment") || "");
-    const date = formData.get("date")
-      ? new Date(String(formData.get("date")))
-      : new Date();
-    const followUp = formData.get("followUp")
-      ? new Date(String(formData.get("followUp")))
-      : undefined;
-    if (!cattleId || !treatmentName) {
-      return { error: "Missing cattle or treatment." };
-    }
-    await db.insert(treatment).values({
-      cattleId,
-      treatment: treatmentName,
-      date,
-      followUp,
-      completed: false,
-    });
-    return redirect(`/track-cattle`);
+    return { success: "Cattle deleted successfully" };
   } else if (action === "bulk_add_treatment") {
     const ids = formData.getAll("ids").map(String).filter(Boolean);
     const treatmentName = String(formData.get("treatment") || "");
@@ -304,19 +241,8 @@ export async function action({ request }: Route.ActionArgs) {
         completed: false,
       }))
     );
-    return redirect(`/track-cattle`);
-  } else if (action === "complete_treatment") {
-    const id = String(formData.get("id") || "");
-    if (!id) {
-      return { error: "Missing treatment id." };
-    }
-    await db
-      .update(treatment)
-      .set({ completed: true })
-      .where(eq(treatment.id, id));
-    return null;
+    return { success: "Treatments added successfully" };
   }
-  return redirect(`/track-cattle`);
 }
 
 // Utility to calculate and format cattle age
@@ -362,34 +288,22 @@ export default function TrackCattle() {
     cattleData,
     isLoggedIn,
     search,
-    breedSuggestions,
     treatmentsByCattle = {},
     treatmentSuggestions = [],
     minAgeMonths,
     maxAgeMonths,
   } = useLoaderData();
+
   const [searchValue, setSearchValue] = useState(search || "");
-  const [addOpen, setAddOpen] = useState(false);
-  const [addGroup, setAddGroup] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState<string | null>(null);
-  const [editCattle, setEditCattle] = useState<any>(null);
-  const submit = useSubmit();
+
   const navigation = useNavigation();
-  const addFormRef = useRef<HTMLFormElement>(null);
-  const actionData = useActionData() as any;
-  const [addGender, setAddGender] = useState("");
-  const [editGender, setEditGender] = useState<string | null>(null);
-  // Delete dialog state
-  const [deleteOpen, setDeleteOpen] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   // Treatment dialog state
-  const [treatmentOpen, setTreatmentOpen] = useState<string | null>(null);
   const [bulkTreatmentOpen, setBulkTreatmentOpen] = useState(false);
   // Add this state to track which dialog was last submitted
   const [lastSubmittedDialog, setLastSubmittedDialog] = useState<
@@ -420,54 +334,9 @@ export default function TrackCattle() {
       : [minAgeMonths, maxAgeMonths]
   );
 
-  // Add refs for breed and treatment inputs
-  const addBreedInputRef = useRef<HTMLInputElement>(null);
-  const editBreedInputRef = useRef<HTMLInputElement>(null);
-  const treatmentInputRef = useRef<HTMLInputElement>(null);
   const bulkTreatmentInputRef = useRef<HTMLInputElement>(null);
 
-  // Add this useEffect to close dialogs only after successful submission
-  useEffect(() => {
-    if (navigation.state === "idle" && lastSubmittedDialog) {
-      switch (lastSubmittedDialog) {
-        case "add":
-          setAddOpen(false);
-          setAddGroup(false);
-          setAddError(null);
-          if (addFormRef.current) addFormRef.current.reset();
-          break;
-        case "edit":
-          setEditOpen(null);
-          setEditCattle(null);
-          break;
-        case "delete":
-          setDeleteOpen(null);
-          setDeleteConfirm(false);
-          break;
-        case "bulkDelete":
-          setBulkDeleteOpen(false);
-          setBulkDeleteConfirm(false);
-          setSelectMode(false);
-          setSelectedIds([]);
-          break;
-        case "treatment":
-          setTreatmentOpen(null);
-          break;
-        case "bulkTreatment":
-          setBulkTreatmentOpen(false);
-          break;
-      }
-      setLastSubmittedDialog(null);
-    }
-  }, [navigation.state, lastSubmittedDialog]);
-
-  // Show backend error in dialog if present
-  useEffect(() => {
-    if (actionData && actionData.error) {
-      setAddOpen(true);
-      setAddError(actionData.error);
-    }
-  }, [actionData]);
+  const navigate = useNavigate();
 
   // Filter client-side for instant search UX
   let filteredCattle = searchValue
@@ -499,16 +368,6 @@ export default function TrackCattle() {
     });
   }
 
-  function handleEditOpen(c: any) {
-    setEditCattle(c);
-    setEditOpen(c.id);
-  }
-
-  function handleEditClose() {
-    setEditOpen(null);
-    setEditCattle(null);
-  }
-
   function handleSelectToggle() {
     setSelectMode((prev) => !prev);
     setSelectedIds([]);
@@ -537,7 +396,6 @@ export default function TrackCattle() {
   // CattleCard component for card UI
   function CattleCard({ cattle }: { cattle: any }) {
     const isSelected = selectedIds.includes(cattle.id);
-    const [showTreatments, setShowTreatments] = useState(false);
     const treatments = treatmentsByCattle[cattle.id] || [];
     // Split treatments
     const pendingTreatments = treatments.filter(
@@ -556,244 +414,170 @@ export default function TrackCattle() {
     });
 
     const navigation = useNavigation();
-    // Helper to check if a treatment is being completed
-    const isCompleting = (id: string) => {
-      if (navigation.state !== "submitting") return false;
-      const formData = navigation.formData;
-      return (
-        formData?.get("_action") === "complete_treatment" &&
-        formData?.get("id") === id
-      );
-    };
+
     return (
-      <Card
-        className={`w-full max-w-sm mx-auto shadow-sm hover:shadow-md transition-shadow relative ${
-          selectMode
-            ? "pr-8 cursor-pointer ring-2 ring-offset-2 " +
-              (isSelected ? "ring-blue-500" : "ring-transparent")
-            : ""
-        } ${hasUrgentPending ? "border-2 border-red-500 bg-red-50" : ""}`}
-        onClick={
-          selectMode
-            ? (e) => {
-                if ((e.target as HTMLElement).closest('input[type="checkbox"]'))
-                  return;
-                handleCardSelect(cattle.id);
-              }
-            : undefined
-        }
-        tabIndex={selectMode ? 0 : -1}
-        aria-pressed={selectMode ? isSelected : undefined}
-      >
-        {selectMode && (
-          <input
-            type="checkbox"
-            className="absolute top-3 right-3 z-10 h-5 w-5"
-            checked={isSelected}
-            onChange={() => handleCardSelect(cattle.id)}
-            aria-label="Select cattle"
-            onClick={(e) => e.stopPropagation()}
-          />
-        )}
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold text-lg">{cattle.tag_number}</span>
+      <>
+        <Card
+          className={`w-full max-w-sm mx-auto shadow-sm hover:shadow-md transition-shadow relative ${
+            selectMode
+              ? "pr-8 cursor-pointer ring-2 ring-offset-2 " +
+                (isSelected ? "ring-blue-500" : "ring-transparent")
+              : ""
+          } ${hasUrgentPending ? "border-2 border-red-500 bg-red-50" : ""}`}
+          onClick={
+            selectMode
+              ? (e) => {
+                  if (
+                    (e.target as HTMLElement).closest('input[type="checkbox"]')
+                  )
+                    return;
+                  handleCardSelect(cattle.id);
+                }
+              : undefined
+          }
+          tabIndex={selectMode ? 0 : -1}
+          aria-pressed={selectMode ? isSelected : undefined}
+        >
+          {selectMode && (
+            <input
+              type="checkbox"
+              className="absolute top-3 right-3 z-10 h-5 w-5"
+              checked={isSelected}
+              onChange={() => handleCardSelect(cattle.id)}
+              aria-label="Select cattle"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                <span className="font-semibold text-lg">
+                  {cattle.tag_number}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    pendingTreatments.length > 0 ? "default" : "secondary"
+                  }
+                  className="flex items-center gap-1"
+                >
+                  <Stethoscope className="h-3 w-3 mr-1" />
+                  {pendingTreatments.length}
+                </Badge>
+                <Badge
+                  variant={cattle.gender === "bul" ? "default" : "secondary"}
+                  className="capitalize"
+                >
+                  {GENDER_OPTIONS.find((opt) => opt.value === cattle.gender)
+                    ?.label || cattle.gender}
+                </Badge>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={pendingTreatments.length > 0 ? "default" : "secondary"}
-                className="flex items-center gap-1"
-              >
-                <Stethoscope className="h-3 w-3 mr-1" />
-                {pendingTreatments.length}
-              </Badge>
-              <Badge
-                variant={cattle.gender === "bul" ? "default" : "secondary"}
-                className="capitalize"
-              >
-                {GENDER_OPTIONS.find((opt) => opt.value === cattle.gender)
-                  ?.label || cattle.gender}
-              </Badge>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Heart className="h-3 w-3" />
+                  <span>Breed</span>
+                </div>
+                <p className="font-medium">{cattle.breed || "Not specified"}</p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Scale className="h-3 w-3" />
+                  <span>Mass</span>
+                </div>
+                <p className="font-medium">{cattle.mass} kg</p>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+            {/* Age row */}
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Heart className="h-3 w-3" />
-                <span>Breed</span>
+                <Calendar className="h-3 w-3" />
+                <span>Age</span>
               </div>
-              <p className="font-medium">{cattle.breed || "Not specified"}</p>
+              <p className="font-medium">
+                {getCattleAge(cattle.receivedAt, cattle.receivedAge)}
+              </p>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Scale className="h-3 w-3" />
-                <span>Mass</span>
-              </div>
-              <p className="font-medium">{cattle.mass} kg</p>
-            </div>
-          </div>
-          {/* Age row */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              <span>Age</span>
-            </div>
-            <p className="font-medium">
-              {getCattleAge(cattle.receivedAt, cattle.receivedAge)}
-            </p>
-          </div>
-          {/* Treatments collapsible */}
-          <div>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-blue-600 hover:underline text-sm mb-1"
-              onClick={() => setShowTreatments((v) => !v)}
-              aria-expanded={showTreatments}
-            >
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${
-                  showTreatments ? "rotate-180" : ""
-                }`}
-              />
-              Treatments ({treatments.length})
-            </button>
-            {showTreatments && (
-              <div className="border rounded p-2 bg-muted text-sm space-y-4">
-                {/* Pending Treatments Section */}
-                <div>
-                  <div className="font-semibold mb-1">Pending Treatments</div>
-                  {pendingTreatments.length === 0 ? (
-                    <div className="text-muted-foreground">
-                      No pending treatments.
-                    </div>
-                  ) : (
-                    pendingTreatments.map((t: any, i: number) => (
-                      <div
-                        key={t.id || i}
-                        className="flex justify-between items-center gap-4 border-b last:border-b-0 pb-2 last:pb-0"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold">{t.treatment}</div>
-                          <div>
-                            Date:{" "}
-                            {t.date
-                              ? new Date(t.date).toLocaleDateString()
-                              : "-"}
-                          </div>
-                          {t.followUp && (
-                            <div>
-                              Follow-up:{" "}
-                              {new Date(t.followUp).toLocaleDateString()}
-                            </div>
-                          )}
-                          <div>Status: Pending</div>
-                        </div>
-                        <div className="flex items-center justify-center h-full w-24">
-                          <Form method="post" className="mt-1" navigate={false}>
-                            <input
-                              type="hidden"
-                              name="_action"
-                              value="complete_treatment"
-                            />
-                            <input type="hidden" name="id" value={t.id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="destructive"
-                              disabled={isCompleting(t.id)}
-                            >
-                              {isCompleting(t.id)
-                                ? "Completing..."
-                                : "Complete"}
-                            </Button>
-                          </Form>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                {/* Historic Treatments Section */}
-                <div className="mt-4">
-                  <div className="font-semibold mb-1">History</div>
-                  {historicTreatments.length === 0 ? (
-                    <div className="text-muted-foreground">
-                      No historic treatments.
-                    </div>
-                  ) : (
-                    historicTreatments.map((t: any, i: number) => (
-                      <div
-                        key={t.id || i}
-                        className="flex flex-col gap-1 border-b last:border-b-0 pb-2 last:pb-0"
-                      >
-                        <div className="font-semibold">{t.treatment}</div>
-                        <div>
-                          Date:{" "}
-                          {t.date ? new Date(t.date).toLocaleDateString() : "-"}
-                        </div>
-                        {t.followUp && (
-                          <div>
-                            Follow-up:{" "}
-                            {new Date(t.followUp).toLocaleDateString()}
-                          </div>
-                        )}
-                        <div>Status: Completed</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          {/* Add Treatment Button */}
-          {!selectMode && (
+            {/* View Treatments Button */}
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+              className="flex-1 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
               onClick={() => {
-                setTreatmentOpen(cattle.id);
+                navigate(`/track-cattle/treatment-view/${cattle.tag_number}`, {
+                  preventScrollReset: true,
+                });
               }}
-              aria-label="Add Treatment"
+              aria-label="View Treatments"
             >
-              <PlusCircle className="h-4 w-4 mr-1" />
-              Add Treatment
+              <Stethoscope className="h-4 w-4 mr-1" />
+              View Treatments
             </Button>
-          )}
-          {!selectMode && (
-            <div className="flex gap-2 pt-2">
+            {/* Add Treatment Button */}
+            {!selectMode && (
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                onClick={() => handleEditOpen(cattle)}
-                aria-label="View/Edit"
-              >
-                <Eye className="h-4 w-4 mr-1" />
-                View/Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 w-full bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
-                aria-label="Delete"
+                className="flex-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
                 onClick={() => {
-                  setDeleteOpen(cattle.id);
-                  setDeleteConfirm(false);
+                  navigate(`/track-cattle/treatment/${cattle.tag_number}`, {
+                    preventScrollReset: true,
+                  });
                 }}
+                aria-label="Add Treatment"
               >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Delete
+                <PlusCircle className="h-4 w-4 mr-1" />
+                Add Treatment
               </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+            {!selectMode && (
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                  onClick={() =>
+                    navigate(`/track-cattle/edit/${cattle.tag_number}`, {
+                      preventScrollReset: true,
+                    })
+                  }
+                  aria-label="View/Edit"
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  View/Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 w-full bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                  aria-label="Delete"
+                  onClick={() => {
+                    navigate(`/track-cattle/delete/${cattle.tag_number}`, {
+                      preventScrollReset: true,
+                    });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </>
     );
   }
+
+  // In TrackCattle component, after navigation and lastSubmittedDialog are defined:
+
+  const isBulkTreatmentLoading =
+    navigation.state === "submitting" &&
+    lastSubmittedDialog === "bulkTreatment";
 
   return (
     <>
@@ -871,170 +655,16 @@ export default function TrackCattle() {
                 </Button>
               )}
             </div>
-            {!selectMode && (
-              <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    onClick={() => setAddOpen(true)}
-                    className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
-                  >
-                    Add Cattle
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="w-full max-w-md mx-auto">
-                  <DialogHeader>
-                    <DialogTitle>Add Cattle</DialogTitle>
-                    <DialogDescription>
-                      Enter new cattle details.
-                    </DialogDescription>
-                  </DialogHeader>
-                  {addError && (
-                    <div className="text-red-500 text-sm mb-2">{addError}</div>
-                  )}
-                  <Form
-                    method="post"
-                    className="space-y-4"
-                    ref={addFormRef}
-                    onSubmit={() => {
-                      setAddError(null);
-                      setLastSubmittedDialog("add");
-                    }}
-                  >
-                    <input type="hidden" name="_action" value="add" />
-                    <input
-                      type="hidden"
-                      name="add_group"
-                      value={addGroup ? "1" : "0"}
-                    />
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="add_group"
-                        checked={addGroup}
-                        onChange={(e) => setAddGroup(e.target.checked)}
-                      />
-                      <Label htmlFor="add_group">Add group</Label>
-                    </div>
-                    {!addGroup && null}
-                    {addGroup && (
-                      <>
-                        <div>
-                          <Label htmlFor="group_count">
-                            Number of cattle to add
-                          </Label>
-                          <Input
-                            name="group_count"
-                            id="group_count"
-                            type="number"
-                            min={1}
-                            required
-                          />
-                        </div>
-                      </>
-                    )}
-                    <div>
-                      <Label htmlFor="gender">Gender</Label>
-                      <Select
-                        value={addGender}
-                        onValueChange={setAddGender}
-                        required
-                      >
-                        <SelectTrigger className="w-full border rounded-md px-3 py-2">
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {GENDER_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <input
-                        type="hidden"
-                        name="gender"
-                        value={addGender}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="breed">Breed</Label>
-                      {/* Breed suggestions as badges */}
-                      {breedSuggestions.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {breedSuggestions.map((breed: string) => (
-                            <Badge
-                              key={breed}
-                              variant={
-                                addBreedInputRef.current?.value === breed
-                                  ? "secondary"
-                                  : "outline"
-                              }
-                              className="cursor-pointer"
-                              onClick={() => {
-                                if (addBreedInputRef.current) {
-                                  addBreedInputRef.current.value = breed;
-                                  addBreedInputRef.current.focus();
-                                }
-                              }}
-                            >
-                              {breed}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      <Input
-                        name="breed"
-                        id="breed"
-                        ref={addBreedInputRef}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="mass">Mass (kg)</Label>
-                      <Input
-                        name="mass"
-                        id="mass"
-                        type="number"
-                        min={0}
-                        required
-                      />
-                    </div>
-                    {/* Receive Date */}
-                    <div>
-                      <Label htmlFor="receivedAt">Receive Date</Label>
-                      <Input
-                        name="receivedAt"
-                        id="receivedAt"
-                        type="date"
-                        defaultValue={new Date().toISOString().slice(0, 10)}
-                        required
-                      />
-                    </div>
-                    {/* Received Age */}
-                    <div>
-                      <Label htmlFor="receivedAge">Received Age (months)</Label>
-                      <Input
-                        name="receivedAge"
-                        id="receivedAge"
-                        type="number"
-                        min={0}
-                        defaultValue={0}
-                        required
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit">Add</Button>
-                      <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                          Cancel
-                        </Button>
-                      </DialogClose>
-                    </DialogFooter>
-                  </Form>
-                </DialogContent>
-              </Dialog>
-            )}
+            <Button
+              onClick={() =>
+                navigate("/track-cattle/add", {
+                  preventScrollReset: true,
+                })
+              }
+              className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
+            >
+              Add Cattle
+            </Button>
           </div>
         </div>
 
@@ -1139,203 +769,12 @@ export default function TrackCattle() {
             {filteredCattle.map((c: any) => (
               <div key={c.id}>
                 <CattleCard cattle={c} />
-                {/* Edit Dialog for this cattle */}
-                <Dialog
-                  open={editOpen === c.id}
-                  onOpenChange={(open) =>
-                    open ? handleEditOpen(c) : handleEditClose()
-                  }
-                >
-                  <DialogContent className="w-full max-w-md mx-auto">
-                    <DialogHeader>
-                      <DialogTitle>Edit Cattle</DialogTitle>
-                      <DialogDescription>
-                        Update cattle details.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <Form
-                      method="post"
-                      className="space-y-4"
-                      onSubmit={() => setLastSubmittedDialog("edit")}
-                    >
-                      <input type="hidden" name="_action" value="edit" />
-                      <input type="hidden" name="id" value={c.id} />
-                      <div>
-                        <Label htmlFor="tag_number">Tag Number</Label>
-                        <Input
-                          disabled
-                          name="tag_number"
-                          id="tag_number"
-                          defaultValue={c.tag_number}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="gender">Gender</Label>
-                        <Select
-                          value={editGender ?? c.gender}
-                          onValueChange={setEditGender}
-                          required
-                        >
-                          <SelectTrigger className="w-full border rounded-md px-3 py-2">
-                            <SelectValue placeholder="Select gender" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {GENDER_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <input
-                          type="hidden"
-                          name="gender"
-                          value={editGender ?? c.gender}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="breed">Breed</Label>
-                        {/* Breed suggestions as badges */}
-                        {breedSuggestions.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {breedSuggestions.map((breed: string) => (
-                              <Badge
-                                key={breed}
-                                variant={
-                                  editBreedInputRef.current?.value === breed
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                className="cursor-pointer"
-                                onClick={() => {
-                                  if (editBreedInputRef.current) {
-                                    editBreedInputRef.current.value = breed;
-                                    editBreedInputRef.current.focus();
-                                  }
-                                }}
-                              >
-                                {breed}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        <Input
-                          name="breed"
-                          id="breed"
-                          ref={editBreedInputRef}
-                          defaultValue={c.breed}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="mass">Mass (kg)</Label>
-                        <Input
-                          name="mass"
-                          id="mass"
-                          type="number"
-                          min={0}
-                          defaultValue={c.mass}
-                          required
-                        />
-                      </div>
-                      {/* Receive Date */}
-                      <div>
-                        <Label htmlFor="receivedAt">Receive Date</Label>
-                        <Input
-                          name="receivedAt"
-                          id="receivedAt"
-                          type="date"
-                          defaultValue={
-                            c.receivedAt
-                              ? new Date(c.receivedAt)
-                                  .toISOString()
-                                  .slice(0, 10)
-                              : ""
-                          }
-                          required
-                        />
-                      </div>
-                      {/* Received Age */}
-                      <div>
-                        <Label htmlFor="receivedAge">
-                          Received Age (months)
-                        </Label>
-                        <Input
-                          name="receivedAge"
-                          id="receivedAge"
-                          type="number"
-                          min={0}
-                          defaultValue={c.receivedAge ?? 0}
-                          required
-                        />
-                      </div>
-                      <DialogFooter>
-                        <Button type="submit">Save</Button>
-                        <DialogClose asChild>
-                          <Button type="button" variant="secondary">
-                            Cancel
-                          </Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
               </div>
             ))}
           </div>
         </div>
       </div>
-      {/* Delete confirmation dialog (Shadcn) */}
-      <Dialog
-        open={!!deleteOpen}
-        onOpenChange={(open) => {
-          if (!open) setDeleteOpen(null);
-        }}
-      >
-        <DialogContent className="w-full max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>Delete Cattle</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this cattle? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 py-4">
-            <Switch
-              id="delete-confirm"
-              checked={deleteConfirm}
-              onCheckedChange={setDeleteConfirm}
-            />
-            <Label htmlFor="delete-confirm">
-              I understand, delete this cattle
-            </Label>
-          </div>
-          <Form
-            method="post"
-            className="flex justify-end gap-2"
-            onSubmit={() => setLastSubmittedDialog("delete")}
-          >
-            <input type="hidden" name="_action" value="delete" />
-            <input type="hidden" name="id" value={deleteOpen || ""} />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setDeleteOpen(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={!deleteConfirm || navigation.state !== "idle"}
-            >
-              Delete
-            </Button>
-          </Form>
-        </DialogContent>
-      </Dialog>
+
       {/* Bulk delete confirmation dialog */}
       <Dialog
         open={bulkDeleteOpen}
@@ -1396,84 +835,7 @@ export default function TrackCattle() {
           </Form>
         </DialogContent>
       </Dialog>
-      {/* Add Treatment Dialog (per cattle) */}
-      <Dialog
-        open={!!treatmentOpen}
-        onOpenChange={(open) => {
-          if (!open) setTreatmentOpen(null);
-        }}
-      >
-        <DialogContent className="w-full max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>Add Treatment</DialogTitle>
-            <DialogDescription>
-              Add a treatment for this animal.
-            </DialogDescription>
-          </DialogHeader>
-          <Form
-            method="post"
-            className="space-y-4"
-            onSubmit={() => {
-              setLastSubmittedDialog("treatment");
-            }}
-          >
-            <input type="hidden" name="_action" value="add_treatment" />
-            <input type="hidden" name="cattleId" value={treatmentOpen || ""} />
-            <div>
-              <Label htmlFor="treatment">Treatment</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {treatmentSuggestions.map((s: string) => (
-                  <Badge
-                    key={s}
-                    variant={
-                      treatmentInputRef.current?.value === s
-                        ? "secondary"
-                        : "outline"
-                    }
-                    className="cursor-pointer"
-                    onClick={() => {
-                      if (treatmentInputRef.current) {
-                        treatmentInputRef.current.value = s;
-                        treatmentInputRef.current.focus();
-                      }
-                    }}
-                  >
-                    {s}
-                  </Badge>
-                ))}
-              </div>
-              <Input
-                name="treatment"
-                id="treatment"
-                ref={treatmentInputRef}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="date">Date</Label>
-              <Input
-                name="date"
-                id="date"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="followUp">Follow-up Date (optional)</Label>
-              <Input name="followUp" id="followUp" type="date" />
-            </div>
-            <DialogFooter>
-              <Button type="submit">Add</Button>
-              <DialogClose asChild>
-                <Button type="button" variant="secondary">
-                  Cancel
-                </Button>
-              </DialogClose>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
+
       {/* Bulk Add Treatment Dialog */}
       <Dialog
         open={bulkTreatmentOpen}
@@ -1544,7 +906,13 @@ export default function TrackCattle() {
               <Input name="followUp" id="followUp" type="date" />
             </div>
             <DialogFooter>
-              <Button type="submit">Add to Selected</Button>
+              <Button
+                type="submit"
+                loading={isBulkTreatmentLoading}
+                disabled={isBulkTreatmentLoading}
+              >
+                Add to Selected
+              </Button>
               <DialogClose asChild>
                 <Button type="button" variant="secondary">
                   Cancel
@@ -1554,6 +922,7 @@ export default function TrackCattle() {
           </Form>
         </DialogContent>
       </Dialog>
+      <Outlet />
     </>
   );
 }
