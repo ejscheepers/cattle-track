@@ -28,7 +28,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   if (session) {
-    throw redirect("/dashboard");
+    throw redirect("/track-cattle");
   }
 
   return null;
@@ -100,7 +100,7 @@ export default function Login() {
                   {
                     email: email,
                     password: password,
-                    callbackURL: "/dashboard",
+                    callbackURL: "/track-cattle",
                     rememberMe: rememberMe,
                   },
                   {

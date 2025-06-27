@@ -1,0 +1,2 @@
+- Logo generate chat GPT
+- Add infinte scrolling to main page

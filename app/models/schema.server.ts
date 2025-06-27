@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -50,13 +50,29 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
-export const todo = pgTable("todo", {
+export const genderEnum = pgEnum("gender", ["bul", "vers", "os", 'koei']);
+
+export const cattle = pgTable("cattle", {
   id: text("id")
     .$defaultFn(() => createId())
     .primaryKey(),
-  text: text("text").notNull(),
-  userId: text("userId")
+  tag_number: text("tag_number").notNull().unique(),
+  gender: genderEnum("gender").notNull(),
+  breed: text("breed").notNull().default(""),
+  mass: integer("mass").notNull().default(0),
+  receivedAt: timestamp("receivedAt").notNull().defaultNow(),
+  receivedAge: integer("receivedAge").notNull().default(0), //Months
+});
+
+export const treatment = pgTable("treatment", {
+  id: text("id")
+    .$defaultFn(() => createId())
+    .primaryKey(),
+  cattleId: text("cattleId")
     .notNull()
-    .references(() => user.id),
-  completed: text("completed").notNull().default("false"),
+    .references(() => cattle.id, { onDelete: "cascade" }),
+  treatment: text("treatment").notNull(),
+  date: timestamp("date").notNull().defaultNow(),
+  followUp: timestamp("followUp"),
+  completed: boolean("completed").notNull().default(false),
 });

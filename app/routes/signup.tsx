@@ -30,7 +30,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   if (session) {
-    throw redirect("/dashboard");
+    throw redirect("/track-cattle");
   }
 
   return null;
@@ -106,7 +106,7 @@ export default function Signup() {
                     onResponse: (ctx) => {
                       setLoading(false);
                       if (ctx.response.status === 200) {
-                        navigate("/dashboard");
+                        navigate("/track-cattle");
                       }
                     },
                     onRequest: () => {

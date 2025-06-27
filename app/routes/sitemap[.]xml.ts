@@ -7,7 +7,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const sitemap = await generateSitemap({
     domain: domainUrl,
     // Defines the routes you want to exclude from the sitemap (useful if routes are dynamic or auto-generated)
-    ignore: ["/dashboard", "/login", "/signup", "/resources/*", "/api/*"],
+    ignore: ["/track-cattle", "/login", "/signup", "/resources/*", "/api/*"],
     // Defines the routes you want to include in the sitemap
     routes: [
       { url: "/", lastmod: "2025-01-28", changefreq: "monthly", priority: 0.8 },

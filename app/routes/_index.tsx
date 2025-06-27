@@ -1,4 +1,5 @@
-import { Nav } from "@/components/nav";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import siteData from "@/config/siteData.json";
 import { auth } from "@/lib/auth";
 import { generateMeta } from "@forge42/seo-tools/remix/metadata";
@@ -40,87 +41,47 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function Index({ loaderData }: Route.ComponentProps) {
   const { isLoggedIn } = loaderData;
   return (
-    <>
-      <Nav isLoggedIn={isLoggedIn} />
-      <div className="flex min-h-full flex-1 flex-col sm:px-6 lg:px-8 pt-6 space-y-6 px-3">
-        <div className="sm:mx-auto sm:w-full flex justify-between items-center">
-          <h1 className="text-4xl">
-            Welcome to the <strong>{siteData.name}!</strong>
-          </h1>
-          <a
-            href="https://github.com/ejscheepers/strato-stack"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-500 hover:text-gray-900 flex items-center gap-2"
-          >
-            View on Github
-            <img
-              height="32"
-              width="32"
-              src="https://cdn.simpleicons.org/github"
-            />
-          </a>
-        </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">React Router</h2>
-            <p>
-              A user-obsessed, standards-focused, multi-strategy router you can
-              deploy anywhere.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">Shadcn UI</h2>
-            <p>
-              Shadcn UI is a set of components and utilities that make building
-              UIs with Tailwind CSS easier and more accessible.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">Tailwind CSS</h2>
-            <p>
-              Tailwind CSS is a utility-first CSS framework for rapidly building
-              custom designs. It's used to style the {siteData.name}.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">Drizzle ORM</h2>
-            <p>
-              Drizzle ORM is a lightweight, flexible, and powerful
-              Object-Relational Mapping (ORM) library for Node.js.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">PostgreSQL</h2>
-            <p>
-              PostgreSQL is a powerful, open-source object-relational database
-              system that uses and extends the SQL language combined with many
-              features that safely store and scale the most complicated data
-              workloads.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">Better Auth</h2>
-            <p>
-              The most comprehensive authentication framework for TypeScript.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">SEO Ready</h2>
-            <p>
-              The {siteData.name} is SEO ready. It automatically generates meta
-              tags, sitemaps, and robots.txt.
-            </p>
-          </div>
-          <div className="bg-white shadow-lg rounded-lg p-6">
-            <h2 className="text-xl font-semibold">Docker Ready</h2>
-            <p>
-              The {siteData.name} is ready to be deployed anywhere using Docker.
-              No vendor lock-in.
-            </p>
+    <main className="flex-1">
+      <section className="w-full min-h-screen flex flex-col justify-center py-6 md:py-12 lg:py-24 xl:py-24 bg-gradient-to-b from-green-50 to-white">
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="grid gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
+            <div className="flex flex-col justify-center space-y-4">
+              <div className="space-y-2">
+                <Badge variant="secondary" className="w-fit">
+                  Simple Cattle Management
+                </Badge>
+                <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none">
+                  Track Your Cattle Information
+                </h1>
+                <p className="max-w-[600px] text-gray-500 md:text-xl">
+                  Keep detailed records of your cattle herd. Track health,
+                  breeding, weights, and important notes for each animal in one
+                  simple system.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 min-[400px]:flex-row">
+                <a href="/track-cattle">
+                  <Button
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Get Started
+                  </Button>
+                </a>
+              </div>
+            </div>
+            <div className="flex items-center justify-center">
+              <img
+                src="/cattle-track-logo.png"
+                width="600"
+                height="auto"
+                alt="Cattle records and information tracking interface"
+                className="mx-auto  overflow-hidden rounded-xl object-contain"
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </>
+      </section>
+    </main>
   );
 }
