@@ -2,15 +2,6 @@ import { Nav } from "@/components/nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,10 +14,10 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { auth } from "@/lib/auth";
-import { getRandomPrefix, parseTag } from "@/lib/cattle-tag-utils";
+import { parseTag } from "@/lib/cattle-tag-utils";
 import { cattle, treatment } from "@/models/schema.server";
 import { db } from "@/utils/db.server";
-import { ilike, inArray } from "drizzle-orm";
+import { ilike } from "drizzle-orm";
 import {
   Calendar,
   ChevronDown,
@@ -39,12 +30,12 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Form,
   Outlet,
   redirect,
   useLoaderData,
+  useLocation,
   useNavigate,
   useNavigation,
 } from "react-router";
@@ -84,9 +75,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Fetch all treatments and group by cattleId
   const treatments = await db.select().from(treatment);
-  const treatmentSuggestions = Array.from(
-    new Set(treatments.map((t) => t.treatment))
-  );
+
   const treatmentsByCattle: Record<string, any[]> = {};
   for (const t of treatments) {
     if (!treatmentsByCattle[t.cattleId]) treatmentsByCattle[t.cattleId] = [];
@@ -109,140 +98,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     isLoggedIn: !!session,
     search,
     treatmentsByCattle,
-    treatmentSuggestions,
     minAgeMonths,
     maxAgeMonths,
   };
-}
-
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-
-  const action = String(formData.get("_action") || "");
-  const addGroup = formData.get("add_group") === "1";
-  if (action === "add" && (addGroup || !addGroup)) {
-    const groupCount = addGroup ? Number(formData.get("group_count") || 0) : 1;
-    const gender = String(formData.get("gender") || "") as
-      | "bul"
-      | "vers"
-      | "os"
-      | "koei";
-    const breed = String(formData.get("breed") || "");
-    const mass = Number(formData.get("mass") || 0);
-    const receivedAt = formData.get("receivedAt")
-      ? new Date(String(formData.get("receivedAt")))
-      : new Date();
-    const receivedAge = Number(formData.get("receivedAge") || 0);
-    if (groupCount < 1) {
-      return { error: "Invalid group count." };
-    }
-    // Get all existing tag numbers
-    const allTags = await db
-      .select({ tag_number: cattle.tag_number })
-      .from(cattle);
-    let tagMap: Record<string, Set<number>> = {};
-    let usedPrefixes = new Set<string>();
-    for (const row of allTags) {
-      const parsed = parseTag(row.tag_number);
-      if (parsed) {
-        if (!tagMap[parsed.prefix]) tagMap[parsed.prefix] = new Set();
-        tagMap[parsed.prefix].add(parsed.number);
-        usedPrefixes.add(parsed.prefix);
-      }
-    }
-    // Find the current prefix (last used with available slots), or pick a new one
-    let prefix = null;
-    let number = 0;
-    // Try to find a prefix with available slots (max 99)
-    for (const p of usedPrefixes) {
-      if (tagMap[p] && tagMap[p].size < 99) {
-        prefix = p;
-        number = Math.max(...Array.from(tagMap[p]));
-        break;
-      }
-    }
-    // If none, pick a new random prefix
-    if (!prefix) {
-      prefix = getRandomPrefix(usedPrefixes);
-      number = 0;
-      tagMap[prefix] = new Set();
-    }
-    const tagNumbers: string[] = [];
-    for (let i = 0; i < groupCount; i++) {
-      number++;
-      if (number > 99) {
-        usedPrefixes.add(prefix);
-        prefix = getRandomPrefix(usedPrefixes);
-        number = 1;
-        if (!tagMap[prefix]) tagMap[prefix] = new Set();
-      }
-      // Ensure uniqueness
-      while (tagMap[prefix] && tagMap[prefix].has(number)) {
-        number++;
-        if (number > 99) {
-          usedPrefixes.add(prefix);
-          prefix = getRandomPrefix(usedPrefixes);
-          number = 1;
-          if (!tagMap[prefix]) tagMap[prefix] = new Set();
-        }
-      }
-      tagMap[prefix].add(number);
-      tagNumbers.push(`${prefix}${number}`);
-    }
-    // Check for existing tag numbers (shouldn't happen, but for safety)
-    const existing = await db
-      .select({ tag_number: cattle.tag_number })
-      .from(cattle)
-      .where(inArray(cattle.tag_number, tagNumbers));
-    if (existing.length > 0) {
-      return {
-        error: `Tag number(s) already exist: ${existing
-          .map((e) => e.tag_number)
-          .join(", ")}`,
-      };
-    }
-    // Insert all
-    await db.insert(cattle).values(
-      tagNumbers.map((tag_number) => ({
-        tag_number,
-        gender,
-        breed,
-        mass,
-        receivedAt,
-        receivedAge,
-      }))
-    );
-    return { success: "Cattle added successfully" };
-  } else if (action === "bulk_delete") {
-    // Bulk delete logic
-    const ids = formData.getAll("ids").map(String).filter(Boolean);
-    if (ids.length > 0) {
-      await db.delete(cattle).where(inArray(cattle.id, ids));
-    }
-    return { success: "Cattle deleted successfully" };
-  } else if (action === "bulk_add_treatment") {
-    const ids = formData.getAll("ids").map(String).filter(Boolean);
-    const treatmentName = String(formData.get("treatment") || "");
-    const date = formData.get("date")
-      ? new Date(String(formData.get("date")))
-      : new Date();
-    const followUp = formData.get("followUp")
-      ? new Date(String(formData.get("followUp")))
-      : undefined;
-    if (!ids.length || !treatmentName) {
-      return { error: "Missing cattle or treatment." };
-    }
-    await db.insert(treatment).values(
-      ids.map((cattleId) => ({
-        cattleId,
-        treatment: treatmentName,
-        date,
-        followUp,
-        completed: false,
-      }))
-    );
-    return { success: "Treatments added successfully" };
-  }
 }
 
 // Utility to calculate and format cattle age
@@ -289,32 +147,16 @@ export default function TrackCattle() {
     isLoggedIn,
     search,
     treatmentsByCattle = {},
-    treatmentSuggestions = [],
     minAgeMonths,
     maxAgeMonths,
   } = useLoaderData();
 
   const [searchValue, setSearchValue] = useState(search || "");
 
-  const navigation = useNavigation();
-
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
-  // Treatment dialog state
-  const [bulkTreatmentOpen, setBulkTreatmentOpen] = useState(false);
-  // Add this state to track which dialog was last submitted
-  const [lastSubmittedDialog, setLastSubmittedDialog] = useState<
-    | null
-    | "add"
-    | "edit"
-    | "delete"
-    | "bulkDelete"
-    | "treatment"
-    | "bulkTreatment"
-  >(null);
+
   // Pending treatments filter state
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   // Add state for pending treatment filter
@@ -334,9 +176,15 @@ export default function TrackCattle() {
       : [minAgeMonths, maxAgeMonths]
   );
 
-  const bulkTreatmentInputRef = useRef<HTMLInputElement>(null);
-
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname === "/track-cattle") {
+      setSelectedIds([]);
+      setSelectMode(false);
+    }
+  }, [location.pathname]);
 
   // Filter client-side for instant search UX
   let filteredCattle = searchValue
@@ -573,12 +421,6 @@ export default function TrackCattle() {
     );
   }
 
-  // In TrackCattle component, after navigation and lastSubmittedDialog are defined:
-
-  const isBulkTreatmentLoading =
-    navigation.state === "submitting" &&
-    lastSubmittedDialog === "bulkTreatment";
-
   return (
     <>
       <Nav isLoggedIn={isLoggedIn} />
@@ -617,7 +459,16 @@ export default function TrackCattle() {
                 <Button
                   variant="destructive"
                   disabled={selectedIds.length === 0}
-                  onClick={() => setBulkDeleteOpen(true)}
+                  onClick={() => {
+                    if (selectedIds.length > 0) {
+                      navigate(
+                        `/track-cattle/delete-bulk?ids=${selectedIds.join(
+                          ","
+                        )}`,
+                        { preventScrollReset: true }
+                      );
+                    }
+                  }}
                   className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
                 >
                   Delete Selected
@@ -646,7 +497,14 @@ export default function TrackCattle() {
                   variant="outline"
                   disabled={selectedIds.length === 0}
                   onClick={() => {
-                    setBulkTreatmentOpen(true);
+                    if (selectedIds.length > 0) {
+                      navigate(
+                        `/track-cattle/treatment-bulk?ids=${selectedIds.join(
+                          ","
+                        )}`,
+                        { preventScrollReset: true }
+                      );
+                    }
                   }}
                   className="w-full max-w-sm mx-auto sm:w-auto sm:mx-0"
                 >
@@ -775,153 +633,6 @@ export default function TrackCattle() {
         </div>
       </div>
 
-      {/* Bulk delete confirmation dialog */}
-      <Dialog
-        open={bulkDeleteOpen}
-        onOpenChange={(open) => {
-          if (!open) setBulkDeleteOpen(open);
-        }}
-      >
-        <DialogContent className="w-full max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>Delete Selected Cattle</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the selected cattle? This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-32 overflow-y-auto border rounded p-2 mb-2 bg-muted text-sm">
-            <div className="font-semibold mb-1">Tag numbers to be deleted:</div>
-            <ul className="list-disc pl-5">
-              {selectedIds.map((id) => {
-                const c = cattleData.find((c: any) => c.id === id);
-                return c ? <li key={id}>{c.tag_number}</li> : null;
-              })}
-            </ul>
-          </div>
-          <div className="flex items-center gap-2 py-4">
-            <Switch
-              id="bulk-delete-confirm"
-              checked={bulkDeleteConfirm}
-              onCheckedChange={setBulkDeleteConfirm}
-            />
-            <Label htmlFor="bulk-delete-confirm">
-              I understand, delete selected cattle
-            </Label>
-          </div>
-          <Form
-            method="post"
-            className="flex justify-end gap-2"
-            onSubmit={() => setLastSubmittedDialog("bulkDelete")}
-          >
-            <input type="hidden" name="_action" value="bulk_delete" />
-            {selectedIds.map((id) => (
-              <input key={id} type="hidden" name="ids" value={id} />
-            ))}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setBulkDeleteOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={!bulkDeleteConfirm || navigation.state !== "idle"}
-            >
-              Delete Selected
-            </Button>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Add Treatment Dialog */}
-      <Dialog
-        open={bulkTreatmentOpen}
-        onOpenChange={(open) => {
-          if (!open) setBulkTreatmentOpen(open);
-        }}
-      >
-        <DialogContent className="w-full max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>Add Treatment to Selected</DialogTitle>
-            <DialogDescription>
-              Add a treatment for all selected cattle.
-            </DialogDescription>
-          </DialogHeader>
-          <Form
-            method="post"
-            className="space-y-4"
-            onSubmit={() => {
-              setLastSubmittedDialog("bulkTreatment");
-            }}
-          >
-            <input type="hidden" name="_action" value="bulk_add_treatment" />
-            {selectedIds.map((id) => (
-              <input key={id} type="hidden" name="ids" value={id} />
-            ))}
-            <div>
-              <Label htmlFor="treatment">Treatment</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {treatmentSuggestions.map((s: string) => (
-                  <Badge
-                    key={s}
-                    variant={
-                      bulkTreatmentInputRef.current?.value === s
-                        ? "secondary"
-                        : "outline"
-                    }
-                    className="cursor-pointer"
-                    onClick={() => {
-                      if (bulkTreatmentInputRef.current) {
-                        bulkTreatmentInputRef.current.value = s;
-                        bulkTreatmentInputRef.current.focus();
-                      }
-                    }}
-                  >
-                    {s}
-                  </Badge>
-                ))}
-              </div>
-              <Input
-                name="treatment"
-                id="treatment"
-                ref={bulkTreatmentInputRef}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="date">Date</Label>
-              <Input
-                name="date"
-                id="date"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="followUp">Follow-up Date (optional)</Label>
-              <Input name="followUp" id="followUp" type="date" />
-            </div>
-            <DialogFooter>
-              <Button
-                type="submit"
-                loading={isBulkTreatmentLoading}
-                disabled={isBulkTreatmentLoading}
-              >
-                Add to Selected
-              </Button>
-              <DialogClose asChild>
-                <Button type="button" variant="secondary">
-                  Cancel
-                </Button>
-              </DialogClose>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
       <Outlet />
     </>
   );

@@ -1,6 +1,2 @@
-- Remove Add Cattle Option on index page
 - Logo generate chat GPT
-- Convert Treatment View to Dialog that is scrollable.
-- Add loading states to buttons
 - Add infinte scrolling to main page
-- Fix flashing of Dialogs
