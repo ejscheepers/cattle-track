@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   postgres:
     image: postgres:17.2
@@ -10,6 +9,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_cattle_track:/var/lib/postgresql/data
 volumes:
-  postgres_data:
+  postgres_data_cattle_track:
