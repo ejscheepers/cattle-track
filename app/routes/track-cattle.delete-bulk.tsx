@@ -76,7 +76,7 @@ export default function BulkDeleteCattle() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-full max-w-sm mx-auto">
+      <DialogContent className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Delete Selected Cattle</DialogTitle>
           <DialogDescription>

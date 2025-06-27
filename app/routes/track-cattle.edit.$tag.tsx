@@ -106,7 +106,7 @@ export default function TrackCattleByTag() {
 
   return (
     <Dialog open={editOpen} onOpenChange={setEditOpen}>
-      <DialogContent className="w-full max-w-md mx-auto">
+      <DialogContent className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Cattle</DialogTitle>
           <DialogDescription>Update cattle details.</DialogDescription>

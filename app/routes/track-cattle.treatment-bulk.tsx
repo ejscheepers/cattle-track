@@ -102,7 +102,7 @@ export default function AddBulkTreatment() {
 
   return (
     <Dialog open={addOpen} onOpenChange={setAddOpen}>
-      <DialogContent className="w-full max-w-sm mx-auto">
+      <DialogContent className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Treatment to Selected</DialogTitle>
           <DialogDescription>

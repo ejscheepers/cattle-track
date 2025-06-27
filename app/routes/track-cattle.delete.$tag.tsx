@@ -68,7 +68,7 @@ export default function DeleteCattleByTag() {
 
   return (
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-      <DialogContent className="w-full max-w-sm mx-auto">
+      <DialogContent className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Delete Cattle</DialogTitle>
           <DialogDescription>
